@@ -3,10 +3,10 @@ import socket
 from typing_extensions import assert_never
 import time
 import threading
+from src.connection import Connection, DEFAULTHOST
 
 
 
-DEFAULTHOST = "127.0.0.1"  # Standard loopback interface address (localhost)
 DEFAULTPORT = 3000  # Port to listen on (non-privileged ports are > 1023)
 
 class State(IntEnum):
@@ -31,19 +31,23 @@ class Output(StrEnum):
     STOP = auto()
     OFF = auto()
 
-class ParkingSystem:
+class ParkingSystem(Connection):
     state : State
-    host : str
-    port : int
-    sock : socket.socket
     
     def __init__(self,host:str = DEFAULTHOST,port:int =DEFAULTPORT):
+        super().__init__(host=host,port=port)
         self.state = State.START
-        self.host = host
-        self.port = port
 
-    """Create a socket connection for this component, and start handeling incoming data until the connection is closed"""
-    def connect(self):
+    """ Creates a new thread, which will then start handeling incoming data until the connection is closed
+        This version is non-blocking and immediately returns a handle to the created tread"""
+    def connect(self) -> threading.Thread :
+        thread = threading.Thread(target=self.connect_blocking)
+        thread.start()
+        return thread
+
+    """ Create a socket connection for this component, and start handeling incoming data until the connection is closed.
+        This version is blocking, and onlly returns until the connection is closed."""
+    def connect_blocking(self):
         print("now setting up parking server")
         with socket.socket() as s:
             s.bind((self.host, self.port))
@@ -64,15 +68,7 @@ class ParkingSystem:
             self.sock.close()
             self.sock = None
 
-    """Receive all currently availiable data from the socket"""
-    def receivedata(self)-> str:
-        retval = bytearray()
-        while True:
-            data = self.sock.recv(1024)
-            retval.extend(data)
-            if len(data) < 1024:
-                break
-        return retval.decode("utf-8").strip("\r\n")
+
         
 
     """"Handles an incoming input label"""
@@ -116,9 +112,5 @@ class ParkingSystem:
                 self.send(output)
             
 
-    """Send some data over the currently opened socket if possible"""
-    def send(self,data: str):
-        print(f"sending: !{data}")
-        if self.sock :
-            self.sock.sendall(data.encode())
+
 
